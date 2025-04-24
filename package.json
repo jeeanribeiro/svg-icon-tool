@@ -1,7 +1,7 @@
 {
   "name": "svg-icon-tool",
-  "version": "1.0.0",
-  "description": "CLI to square, center, and resize SVG icons, including stroke widths",
+  "version": "2.0.0",
+  "description": "CLI to square, center, and resize SVG icons, including strokes",
   "main": "cli.js",
   "bin": {
     "svg-icon-tool": "./cli.js"
@@ -21,6 +21,7 @@
   "author": "Jean Ribeiro",
   "license": "MIT",
   "dependencies": {
+    "@davestewart/outliner": "1.2.0",
     "commander": "13.1.0",
     "svg-path-bounds": "1.0.2",
     "svgpath": "2.6.0",
