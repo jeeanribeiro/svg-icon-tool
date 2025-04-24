@@ -1,6 +1,6 @@
 {
   "name": "svg-icon-tool",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "CLI to square, center, and resize SVG icons, including strokes",
   "main": "cli.js",
   "bin": {

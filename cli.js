@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name('svg-icon-tool')
   .description('CLI to square, center, resize SVG icons with currentColor fill and stroke')
-  .version('1.0.0')
+  .version('2.0.1')
   .argument('<input>', 'Input SVG file path')
   .argument('<output>', 'Output SVG file path')
   .option('-s, --size <number>', 'Target size in pixels (default: 24)', '24')
