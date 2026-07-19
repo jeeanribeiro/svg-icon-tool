@@ -16,10 +16,22 @@ import { expandBoundsForStroke, type StrokePolicy } from './stroke.js';
 
 export type { StrokePolicy } from './stroke.js';
 
+/**
+ * How paint colors are treated in the output:
+ * - `currentColor`: every explicit fill/stroke paint (other than `none`)
+ *   becomes `currentColor`, so the icon follows the surrounding text color.
+ *   This is what v2 always did, silently; now it is a documented default
+ *   with an escape hatch.
+ * - `preserve`: colors pass through untouched.
+ */
+export type ColorMode = 'currentColor' | 'preserve';
+
 /** Options accepted by {@link normalizeIcon}. */
 export interface NormalizeOptions {
   /** Target square size in user units. Default: 24. */
   size?: number;
+  /** Paint handling. Default: `currentColor`. */
+  colorMode?: ColorMode;
   /**
    * How strokes contribute to the measured bounds:
    * - `accurate` (default): half-width expansion plus the exact extents of
@@ -111,6 +123,28 @@ const SHAPE_GEOMETRY_ATTRS = [
   'y2',
   'points',
 ];
+
+/**
+ * Rewrite every explicit fill/stroke paint (other than `none`) to
+ * `currentColor`. Content inside <defs> is left alone.
+ */
+function applyCurrentColor(node: INode, warnings: string[]): void {
+  if (node.name === 'defs') return;
+  for (const attr of ['fill', 'stroke'] as const) {
+    const value = node.attributes[attr]?.trim();
+    if (value === undefined || value === '' || value === 'none' || value === 'currentColor') {
+      continue;
+    }
+    if (value.startsWith('url(')) {
+      warnings.push(
+        `<${node.name}>: ${attr}="${value}" replaced with currentColor; ` +
+          'use colorMode "preserve" to keep gradient or pattern paints',
+      );
+    }
+    node.attributes[attr] = 'currentColor';
+  }
+  for (const child of node.children) applyCurrentColor(child, warnings);
+}
 
 /** Scale every number in a length list (e.g. stroke-dasharray) by `factor`. */
 function scaleLengthList(raw: string, factor: number): string | null {
@@ -304,6 +338,10 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
   if (!['accurate', 'half', 'ignore'].includes(strokePolicy)) {
     throw new NormalizeError(`invalid strokePolicy: ${String(options.strokePolicy)}`);
   }
+  const colorMode = options.colorMode ?? 'currentColor';
+  if (!['currentColor', 'preserve'].includes(colorMode)) {
+    throw new NormalizeError(`invalid colorMode: ${String(options.colorMode)}`);
+  }
 
   let root: INode;
   try {
@@ -377,13 +415,10 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
       // A stroke-width without a stroke paints nothing; drop the noise.
       delete node.attributes['stroke-width'];
     }
+  }
 
-    if (node.attributes.fill) {
-      node.attributes.fill = 'currentColor';
-    }
-    if (node.attributes.stroke) {
-      node.attributes.stroke = 'currentColor';
-    }
+  if (colorMode === 'currentColor') {
+    applyCurrentColor(root, warnings);
   }
 
   root.attributes.viewBox = `0 0 ${size} ${size}`;
