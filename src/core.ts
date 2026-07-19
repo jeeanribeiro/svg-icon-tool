@@ -1,6 +1,7 @@
 import { parseSync, stringify, type INode } from 'svgson';
 import svgpath from 'svgpath';
 import pathBounds from 'svg-path-bounds';
+import { SHAPE_NAMES, shapeToPathData } from './shapes.js';
 
 /** Options accepted by {@link normalizeIcon}. */
 export interface NormalizeOptions {
@@ -23,18 +24,102 @@ export class NormalizeError extends Error {
   override name = 'NormalizeError';
 }
 
-function collectPaths(node: INode, out: INode[]): void {
-  if (node.name === 'path' && typeof node.attributes.d === 'string' && node.attributes.d !== '') {
-    out.push(node);
+type Box = [number, number, number, number];
+
+interface MeasuredItem {
+  node: INode;
+  box: Box;
+}
+
+interface WalkState {
+  warnings: string[];
+  items: MeasuredItem[];
+}
+
+/** Containers whose children participate in measurement. */
+const CONTAINER_NAMES = new Set(['svg', 'g', 'a']);
+
+/** Elements preserved verbatim and excluded from measurement. */
+const PRESERVED_NAMES = new Set(['title', 'desc', 'metadata', 'defs']);
+
+const SHAPE_GEOMETRY_ATTRS = [
+  'x',
+  'y',
+  'width',
+  'height',
+  'rx',
+  'ry',
+  'r',
+  'cx',
+  'cy',
+  'x1',
+  'y1',
+  'x2',
+  'y2',
+  'points',
+];
+
+function convertNodeToPath(node: INode, d: string): void {
+  node.name = 'path';
+  for (const attr of SHAPE_GEOMETRY_ATTRS) {
+    delete node.attributes[attr]; // eslint-disable-line @typescript-eslint/no-dynamic-delete
   }
-  for (const child of node.children) collectPaths(child, out);
+  node.attributes.d = d;
+}
+
+function measureNode(node: INode, d: string, state: WalkState): void {
+  let box: Box;
+  try {
+    box = pathBounds(d);
+  } catch (error) {
+    state.warnings.push(`<${node.name}>: could not measure path data: ${(error as Error).message}`);
+    return;
+  }
+  const sw = parseFloat(node.attributes['stroke-width'] ?? '0') || 0;
+  const half = sw / 2;
+  state.items.push({
+    node,
+    box: [box[0] - half, box[1] - half, box[2] + half, box[3] + half],
+  });
+}
+
+function walk(node: INode, state: WalkState): void {
+  if (PRESERVED_NAMES.has(node.name)) return;
+
+  if (node.name === 'path') {
+    const d = node.attributes.d;
+    if (typeof d === 'string' && d.trim() !== '') {
+      measureNode(node, d, state);
+    }
+    return;
+  }
+
+  if (SHAPE_NAMES.has(node.name)) {
+    const result = shapeToPathData(node.name, node.attributes);
+    if (result.kind === 'error') {
+      state.warnings.push(`<${node.name}>: ${result.reason}`);
+      return;
+    }
+    if (result.kind === 'empty') {
+      state.warnings.push(`<${node.name}>: renders nothing (${result.reason})`);
+      return;
+    }
+    convertNodeToPath(node, result.d);
+    measureNode(node, result.d, state);
+    return;
+  }
+
+  if (CONTAINER_NAMES.has(node.name) || node.children.length > 0) {
+    for (const child of node.children) walk(child, state);
+  }
 }
 
 /**
  * Square, center, and resize an SVG icon.
  *
- * Measures the icon's content, scales it to fill a `size`x`size` view box and
- * centers it, scaling stroke widths proportionally.
+ * Measures the icon's content — paths and shape primitives alike — scales it
+ * to fill a `size`x`size` view box and centers it, scaling stroke widths
+ * proportionally. Shape primitives are converted to <path> elements.
  */
 export function normalizeIcon(svg: string, options: NormalizeOptions = {}): NormalizeResult {
   const size = options.size ?? 24;
@@ -51,38 +136,29 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
   if (root.name !== 'svg') {
     throw new NormalizeError(`root element is <${root.name}>, expected <svg>`);
   }
-  const before = stringify(root);
+  const before = stringify(parseSync(svg));
 
-  const warnings: string[] = [];
-  const paths: INode[] = [];
-  collectPaths(root, paths);
+  const state: WalkState = { warnings: [], items: [] };
+  walk(root, state);
+  const { warnings, items } = state;
 
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  const measurable: INode[] = [];
-  for (const node of paths) {
-    try {
-      const [x1, y1, x2, y2] = pathBounds(node.attributes.d ?? '');
-      const sw = parseFloat(node.attributes['stroke-width'] ?? '0') || 0;
-      const half = sw / 2;
-      minX = Math.min(minX, x1 - half);
-      minY = Math.min(minY, y1 - half);
-      maxX = Math.max(maxX, x2 + half);
-      maxY = Math.max(maxY, y2 + half);
-      measurable.push(node);
-    } catch (error) {
-      warnings.push(`<path>: could not measure path data: ${(error as Error).message}`);
-    }
-  }
-
-  if (measurable.length === 0) {
+  if (items.length === 0) {
     throw new NormalizeError(
       warnings.length > 0
         ? `no measurable content found (${warnings.join('; ')})`
         : 'no measurable content found',
     );
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const item of items) {
+    minX = Math.min(minX, item.box[0]);
+    minY = Math.min(minY, item.box[1]);
+    maxX = Math.max(maxX, item.box[2]);
+    maxY = Math.max(maxY, item.box[3]);
   }
 
   const width = maxX - minX;
@@ -96,7 +172,7 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
   const ox = (size - width * scale) / 2;
   const oy = (size - height * scale) / 2;
 
-  for (const node of measurable) {
+  for (const { node } of items) {
     node.attributes.d = svgpath(node.attributes.d ?? '')
       .translate(-minX, -minY)
       .scale(scale)
