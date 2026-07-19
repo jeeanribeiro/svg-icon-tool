@@ -36,11 +36,31 @@ export class NormalizeError extends Error {
 
 type Box = [number, number, number, number];
 
+/** Stroke-related presentation attributes that inherit down the tree. */
+const STROKE_INHERITED = [
+  'stroke',
+  'stroke-width',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-miterlimit',
+  'stroke-dasharray',
+  'stroke-dashoffset',
+] as const;
+
+/** Stroke lengths that must be rescaled and therefore live on the leaves. */
+const STROKE_LENGTH_ATTRS = ['stroke-width', 'stroke-dasharray', 'stroke-dashoffset'] as const;
+
+type StrokeContext = Readonly<Record<string, string>>;
+
 interface MeasuredItem {
   node: INode;
   box: Box;
   /** Uniform scale the flattened transform applied to this element. */
   strokeScale: number;
+  /** Resolved stroke width in local units, or null when no stroke is painted. */
+  strokeWidth: number | null;
+  /** Effective stroke context (inherited and own attributes merged). */
+  strokeCtx: StrokeContext;
 }
 
 interface WalkState {
@@ -71,6 +91,17 @@ const SHAPE_GEOMETRY_ATTRS = [
   'points',
 ];
 
+/** Scale every number in a length list (e.g. stroke-dasharray) by `factor`. */
+function scaleLengthList(raw: string, factor: number): string | null {
+  const parts = raw
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean);
+  const values = parts.map(Number);
+  if (values.some((v) => !Number.isFinite(v))) return null;
+  return values.map((v) => String(v * factor)).join(' ');
+}
+
 function convertNodeToPath(node: INode, d: string): void {
   node.name = 'path';
   for (const attr of SHAPE_GEOMETRY_ATTRS) {
@@ -90,7 +121,31 @@ function flattenTransform(node: INode, d: string, matrix: Matrix): string {
   return flattened;
 }
 
-function measureNode(node: INode, d: string, matrix: Matrix, state: WalkState): void {
+/**
+ * Resolve the stroke width painted by an element, honoring inheritance.
+ * Returns null when no stroke is painted at all — a bare stroke-width with
+ * no stroke paints nothing and must not affect measurement (a v2 bug).
+ */
+function resolveStrokeWidth(node: INode, ctx: StrokeContext, state: WalkState): number | null {
+  const paint = ctx.stroke;
+  if (paint === undefined || paint.trim() === '' || paint.trim() === 'none') return null;
+  const raw = ctx['stroke-width'];
+  if (raw === undefined) return 1;
+  const width = parseFloat(raw);
+  if (!Number.isFinite(width) || width < 0) {
+    state.warnings.push(`<${node.name}>: invalid stroke-width "${raw}", using 1`);
+    return 1;
+  }
+  return width;
+}
+
+function measureNode(
+  node: INode,
+  d: string,
+  matrix: Matrix,
+  ctx: StrokeContext,
+  state: WalkState,
+): void {
   const flattened = flattenTransform(node, d, matrix);
   let box: Box;
   try {
@@ -100,7 +155,8 @@ function measureNode(node: INode, d: string, matrix: Matrix, state: WalkState): 
     return;
   }
   const strokeScale = scaleFactor(matrix);
-  const sw = (parseFloat(node.attributes['stroke-width'] ?? '0') || 0) * strokeScale;
+  const strokeWidth = resolveStrokeWidth(node, ctx, state);
+  const sw = (strokeWidth ?? 0) * strokeScale;
   if (sw > 0 && isNonUniform(matrix)) {
     state.warnings.push(
       `<${node.name}>: non-uniform transform distorts its stroke; the width is approximated`,
@@ -111,6 +167,8 @@ function measureNode(node: INode, d: string, matrix: Matrix, state: WalkState): 
     node,
     box: [box[0] - half, box[1] - half, box[2] + half, box[3] + half],
     strokeScale,
+    strokeWidth,
+    strokeCtx: ctx,
   });
 }
 
@@ -127,14 +185,28 @@ function resolveMatrix(node: INode, parent: Matrix, state: WalkState): Matrix {
   }
 }
 
-function walk(node: INode, parentMatrix: Matrix, state: WalkState): void {
+/** Merge this element's own stroke attributes over the inherited context. */
+function resolveStrokeContext(node: INode, parent: StrokeContext): StrokeContext {
+  let ctx: Record<string, string> | null = null;
+  for (const key of STROKE_INHERITED) {
+    const own = node.attributes[key];
+    if (own !== undefined) {
+      ctx ??= { ...parent };
+      ctx[key] = own;
+    }
+  }
+  return ctx ?? parent;
+}
+
+function walk(node: INode, parentMatrix: Matrix, parentCtx: StrokeContext, state: WalkState): void {
   if (PRESERVED_NAMES.has(node.name)) return;
   const matrix = resolveMatrix(node, parentMatrix, state);
+  const ctx = resolveStrokeContext(node, parentCtx);
 
   if (node.name === 'path') {
     const d = node.attributes.d;
     if (typeof d === 'string' && d.trim() !== '') {
-      measureNode(node, d, matrix, state);
+      measureNode(node, d, matrix, ctx, state);
     }
     return;
   }
@@ -150,12 +222,17 @@ function walk(node: INode, parentMatrix: Matrix, state: WalkState): void {
       return;
     }
     convertNodeToPath(node, result.d);
-    measureNode(node, result.d, matrix, state);
+    measureNode(node, result.d, matrix, ctx, state);
     return;
   }
 
   if (CONTAINER_NAMES.has(node.name) || node.children.length > 0) {
-    for (const child of node.children) walk(child, matrix, state);
+    // Stroke lengths are rescaled per leaf, so containers must not keep
+    // stale copies that would re-apply to the scaled geometry.
+    for (const attr of STROKE_LENGTH_ATTRS) {
+      delete node.attributes[attr]; // eslint-disable-line @typescript-eslint/no-dynamic-delete
+    }
+    for (const child of node.children) walk(child, matrix, ctx, state);
   }
 }
 
@@ -184,7 +261,7 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
   const before = stringify(parseSync(svg));
 
   const state: WalkState = { warnings: [], items: [] };
-  walk(root, IDENTITY, state);
+  walk(root, IDENTITY, {}, state);
   const { warnings, items } = state;
 
   if (items.length === 0) {
@@ -217,16 +294,34 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
   const ox = (size - width * scale) / 2;
   const oy = (size - height * scale) / 2;
 
-  for (const { node, strokeScale } of items) {
+  for (const { node, strokeScale, strokeWidth, strokeCtx } of items) {
     node.attributes.d = svgpath(node.attributes.d ?? '')
       .translate(-minX, -minY)
       .scale(scale)
       .translate(ox, oy)
       .toString();
-    const sw = parseFloat(node.attributes['stroke-width'] ?? '0');
-    if (sw > 0) {
-      node.attributes['stroke-width'] = String(sw * strokeScale * scale);
+
+    const lengthScale = strokeScale * scale;
+    if (strokeWidth !== null) {
+      // Stroke lengths land on the leaf, resolved and rescaled, so the
+      // output no longer depends on inherited values that we cannot scale.
+      node.attributes['stroke-width'] = String(strokeWidth * lengthScale);
+      for (const attr of ['stroke-dasharray', 'stroke-dashoffset'] as const) {
+        const raw = strokeCtx[attr];
+        if (raw !== undefined && raw.trim() !== '' && raw.trim() !== 'none') {
+          const scaled = scaleLengthList(raw, lengthScale);
+          if (scaled === null) {
+            warnings.push(`<path>: could not rescale ${attr}="${raw}"`);
+          } else {
+            node.attributes[attr] = scaled;
+          }
+        }
+      }
+    } else {
+      // A stroke-width without a stroke paints nothing; drop the noise.
+      delete node.attributes['stroke-width'];
     }
+
     if (node.attributes.fill) {
       node.attributes.fill = 'currentColor';
     }
