@@ -116,7 +116,11 @@ function poly(attrs: Attrs, close: boolean): ShapeResult {
   if (raw === undefined || raw.trim() === '') {
     return { kind: 'empty', reason: 'poly element without points' };
   }
-  const coords = raw.trim().split(/[\s,]+/).filter(Boolean).map(Number);
+  const coords = raw
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map(Number);
   if (coords.some((c) => !Number.isFinite(c))) {
     return { kind: 'error', reason: `invalid points attribute "${raw}"` };
   }
