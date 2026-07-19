@@ -1,29 +1,88 @@
 {
   "name": "svg-icon-tool",
-  "version": "2.0.2",
-  "description": "CLI to square, center, and resize SVG icons, including strokes",
-  "main": "cli.js",
-  "bin": {
-    "svg-icon-tool": "./cli.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jeeanribeiro/svg-icon-tool.git"
-  },
+  "version": "3.0.0",
+  "description": "CLI and library to square, center, and resize SVG icons — with proportional stroke scaling",
   "keywords": [
     "svg",
     "cli",
     "icons",
+    "icon",
+    "normalize",
     "resize",
     "stroke",
-    "svg-icon-tool"
+    "viewbox",
+    "design-systems",
+    "svgo"
   ],
-  "author": "Jean Ribeiro",
+  "homepage": "https://github.com/jeeanribeiro/svg-icon-tool#readme",
+  "bugs": "https://github.com/jeeanribeiro/svg-icon-tool/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeeanribeiro/svg-icon-tool.git"
+  },
   "license": "MIT",
+  "author": "Jean Ribeiro <contact@jeanribeiro.dev>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "svg-icon-tool": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "assets": "node scripts/build-assets.mjs",
+    "prepublishOnly": "pnpm build"
+  },
   "dependencies": {
-    "commander": "13.1.0",
+    "commander": "15.0.0",
     "svg-path-bounds": "1.0.2",
+    "svgo": "4.0.2",
     "svgpath": "2.6.0",
-    "svgson": "5.3.1"
+    "svgson": "5.3.1",
+    "tinyglobby": "0.2.17"
+  },
+  "devDependencies": {
+    "@changesets/cli": "2.31.1",
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.1.1",
+    "eslint": "10.7.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.5",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.64.0",
+    "vitest": "4.1.10"
+  },
+  "packageManager": "pnpm@10.29.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

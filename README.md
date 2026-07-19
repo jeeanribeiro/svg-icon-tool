@@ -52,7 +52,7 @@ svg-icon-tool icon.svg icon-32.svg --size 32
 ## 🔧 Options
 
 | Option      | Description                  | Default |
-|-------------|------------------------------|---------|
+| ----------- | ---------------------------- | ------- |
 | `--size`    | Target output size in pixels | `24`    |
 | `--version` | Show CLI version             |         |
 | `--help`    | Show usage help              |         |
