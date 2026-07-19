@@ -86,6 +86,15 @@ const CONTAINER_NAMES = new Set(['svg', 'g', 'a']);
 /** Elements preserved verbatim and excluded from measurement. */
 const PRESERVED_NAMES = new Set(['title', 'desc', 'metadata', 'defs']);
 
+/** Hints appended to the unsupported-element warning where one helps. */
+const UNSUPPORTED_HINTS: Readonly<Record<string, string>> = {
+  text: 'convert text to outlines first',
+  tspan: 'convert text to outlines first',
+  textPath: 'convert text to outlines first',
+  use: 'inline the referenced content first',
+  style: 'CSS rules are not evaluated',
+};
+
 const SHAPE_GEOMETRY_ATTRS = [
   'x',
   'y',
@@ -223,6 +232,15 @@ function resolveStrokeContext(node: INode, parent: StrokeContext): StrokeContext
 
 function walk(node: INode, parentMatrix: Matrix, parentCtx: StrokeContext, state: WalkState): void {
   if (PRESERVED_NAMES.has(node.name)) return;
+  if (node.type === 'text' || node.name === '') return;
+
+  const display = node.attributes.display?.trim();
+  const visibility = node.attributes.visibility?.trim();
+  if (display === 'none' || visibility === 'hidden' || visibility === 'collapse') {
+    state.warnings.push(`<${node.name}>: hidden element skipped (display/visibility)`);
+    return;
+  }
+
   const matrix = resolveMatrix(node, parentMatrix, state);
   const ctx = resolveStrokeContext(node, parentCtx);
 
@@ -249,14 +267,25 @@ function walk(node: INode, parentMatrix: Matrix, parentCtx: StrokeContext, state
     return;
   }
 
-  if (CONTAINER_NAMES.has(node.name) || node.children.length > 0) {
+  if (CONTAINER_NAMES.has(node.name)) {
     // Stroke lengths are rescaled per leaf, so containers must not keep
     // stale copies that would re-apply to the scaled geometry.
     for (const attr of STROKE_LENGTH_ATTRS) {
       delete node.attributes[attr]; // eslint-disable-line @typescript-eslint/no-dynamic-delete
     }
     for (const child of node.children) walk(child, matrix, ctx, state);
+    return;
   }
+
+  // Anything else is unsupported: v2 dropped these on the floor without a
+  // word. The element is left in place untouched, but it does not
+  // contribute to measurement and will not line up with the normalized
+  // geometry, so say so.
+  const hint = UNSUPPORTED_HINTS[node.name];
+  state.warnings.push(
+    `<${node.name}> is not supported and is excluded from measurement` +
+      (hint === undefined ? '' : ` (${hint})`),
+  );
 }
 
 /**

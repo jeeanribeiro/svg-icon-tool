@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <path d="M8 8h32v32H8Z" fill="#0ea5e9"/>
+  <text x="12" y="30" font-size="10">Aa</text>
+  <image href="photo.png" x="0" y="0" width="10" height="10"/>
+</svg>
