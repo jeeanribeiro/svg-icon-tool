@@ -12,11 +12,22 @@ import {
   toTransformString,
   type Matrix,
 } from './transforms.js';
+import { expandBoundsForStroke, type StrokePolicy } from './stroke.js';
+
+export type { StrokePolicy } from './stroke.js';
 
 /** Options accepted by {@link normalizeIcon}. */
 export interface NormalizeOptions {
   /** Target square size in user units. Default: 24. */
   size?: number;
+  /**
+   * How strokes contribute to the measured bounds:
+   * - `accurate` (default): half-width expansion plus the exact extents of
+   *   square caps and miter joins, so wide strokes are never clipped.
+   * - `half`: v2-compatible half-width padding (may clip caps and miters).
+   * - `ignore`: measure geometry only.
+   */
+  strokePolicy?: StrokePolicy;
 }
 
 /** Result returned by {@link normalizeIcon}. */
@@ -66,6 +77,7 @@ interface MeasuredItem {
 interface WalkState {
   warnings: string[];
   items: MeasuredItem[];
+  strokePolicy: StrokePolicy;
 }
 
 /** Containers whose children participate in measurement. */
@@ -162,10 +174,21 @@ function measureNode(
       `<${node.name}>: non-uniform transform distorts its stroke; the width is approximated`,
     );
   }
-  const half = sw / 2;
+  const miterlimitRaw = ctx['stroke-miterlimit'];
+  const miterlimit = miterlimitRaw === undefined ? 4 : parseFloat(miterlimitRaw);
   state.items.push({
     node,
-    box: [box[0] - half, box[1] - half, box[2] + half, box[3] + half],
+    box: expandBoundsForStroke(
+      box,
+      flattened,
+      {
+        width: sw,
+        linecap: ctx['stroke-linecap'] ?? 'butt',
+        linejoin: ctx['stroke-linejoin'] ?? 'miter',
+        miterlimit: Number.isFinite(miterlimit) && miterlimit >= 1 ? miterlimit : 4,
+      },
+      state.strokePolicy,
+    ),
     strokeScale,
     strokeWidth,
     strokeCtx: ctx,
@@ -248,6 +271,10 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
   if (!Number.isFinite(size) || size <= 0) {
     throw new NormalizeError(`invalid size: ${String(options.size)}`);
   }
+  const strokePolicy = options.strokePolicy ?? 'accurate';
+  if (!['accurate', 'half', 'ignore'].includes(strokePolicy)) {
+    throw new NormalizeError(`invalid strokePolicy: ${String(options.strokePolicy)}`);
+  }
 
   let root: INode;
   try {
@@ -260,7 +287,7 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
   }
   const before = stringify(parseSync(svg));
 
-  const state: WalkState = { warnings: [], items: [] };
+  const state: WalkState = { warnings: [], items: [], strokePolicy };
   walk(root, IDENTITY, {}, state);
   const { warnings, items } = state;
 

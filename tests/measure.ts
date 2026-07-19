@@ -1,5 +1,6 @@
 import { parseSync, type INode } from 'svgson';
 import pathBounds from 'svg-path-bounds';
+import { expandBoundsForStroke, type StrokePolicy } from '../src/stroke.js';
 
 export interface Extent {
   minX: number;
@@ -19,10 +20,11 @@ function collect(node: INode, out: INode[]): void {
 
 /**
  * Measure the extent of all <path> geometry in an SVG string, expanding each
- * path by half of its own stroke-width. Used to verify that normalized output
- * actually fills and centers within the target box.
+ * painted stroke according to `policy` using the path's own attributes.
+ * Used to verify that normalized output actually fills and centers within
+ * the target box.
  */
-export function measurePaths(svg: string): Extent {
+export function measurePaths(svg: string, policy: StrokePolicy = 'half'): Extent {
   const root = parseSync(svg);
   const paths: INode[] = [];
   collect(root, paths);
@@ -33,12 +35,26 @@ export function measurePaths(svg: string): Extent {
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const node of paths) {
-    const [x1, y1, x2, y2] = pathBounds(node.attributes.d ?? '');
-    const half = (parseFloat(node.attributes['stroke-width'] ?? '0') || 0) / 2;
-    minX = Math.min(minX, x1 - half);
-    minY = Math.min(minY, y1 - half);
-    maxX = Math.max(maxX, x2 + half);
-    maxY = Math.max(maxY, y2 + half);
+    const d = node.attributes.d ?? '';
+    const geometry = pathBounds(d);
+    const stroke = node.attributes.stroke;
+    const painted = stroke !== undefined && stroke !== 'none';
+    const width = painted ? parseFloat(node.attributes['stroke-width'] ?? '1') || 0 : 0;
+    const box = expandBoundsForStroke(
+      geometry,
+      d,
+      {
+        width,
+        linecap: node.attributes['stroke-linecap'] ?? 'butt',
+        linejoin: node.attributes['stroke-linejoin'] ?? 'miter',
+        miterlimit: parseFloat(node.attributes['stroke-miterlimit'] ?? '4') || 4,
+      },
+      policy,
+    );
+    minX = Math.min(minX, box[0]);
+    minY = Math.min(minY, box[1]);
+    maxX = Math.max(maxX, box[2]);
+    maxY = Math.max(maxY, box[3]);
   }
   return {
     minX,
