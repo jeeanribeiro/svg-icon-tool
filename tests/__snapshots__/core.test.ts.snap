@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`normalizeIcon > squares, centers, and resizes a basic path icon 1`] = `"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path d="M0 0L24 0 24 24Z" fill="currentColor"/></svg>"`;
