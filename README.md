@@ -181,7 +181,6 @@ pnpm playground:build  # static build (deployed to Pages from main)
 ## Roadmap
 
 - Resolve `<use>` references and inline `<style>` rules before measuring.
-- Pixel-diff regression tests via resvg.
 
 ## Contributing
 
