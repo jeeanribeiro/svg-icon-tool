@@ -252,12 +252,7 @@ program
   )
   .option('-s, --size <number>', 'target size in user units', parseNumber('size'), 24)
   .option('-p, --padding <number>', 'margin kept on every side', parseNumber('padding'), 0)
-  .option(
-    '--precision <int>',
-    'decimal places kept in coordinates',
-    parseIntStrict('precision'),
-    3,
-  )
+  .option('--precision <int>', 'decimal places kept in coordinates', parseIntStrict('precision'), 3)
   .addOption(
     new Option('--color-mode <mode>', 'repaint everything with currentColor, or keep paints')
       .choices(['currentColor', 'preserve'] as const)
