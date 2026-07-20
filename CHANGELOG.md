@@ -1,5 +1,11 @@
 # svg-icon-tool
 
+## 3.0.1
+
+### Patch changes
+
+- Path bounds are now computed from true curve extrema instead of the control-point hull. Curves whose control points reach outside the drawn geometry — most hand-drawn cubics, and every arc segment that does not start and end on a quadrant boundary — were measured too large, so those icons came out under-scaled with phantom margins (up to 25% of the box for a plain two-cubic lens shape). The same overestimate made re-normalizing the tool's own arc output report drift, so `--check` failed on clean icon sets. Both are fixed, the `svg-path-bounds` dependency is gone, and idempotence is now covered by tests.
+
 ## 3.0.0
 
 ### Major changes

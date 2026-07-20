@@ -1,6 +1,6 @@
 {
   "name": "svg-icon-tool",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "CLI and library to square, center, and resize SVG icons — with proportional stroke scaling",
   "keywords": [
     "svg",
