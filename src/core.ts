@@ -30,6 +30,16 @@ export type ColorMode = 'currentColor' | 'preserve';
 export interface NormalizeOptions {
   /** Target square size in user units. Default: 24. */
   size?: number;
+  /**
+   * Empty margin kept on every side, in user units. The content scales to
+   * fill `size - 2 * padding` instead of the full view box. Default: 0.
+   */
+  padding?: number;
+  /**
+   * Decimal places kept in emitted coordinates and stroke lengths.
+   * Default: 3 — invisible at icon scale, keeps files small and diffs stable.
+   */
+  precision?: number;
   /** Paint handling. Default: `currentColor`. */
   colorMode?: ColorMode;
   /**
@@ -146,15 +156,21 @@ function applyCurrentColor(node: INode, warnings: string[]): void {
   for (const child of node.children) applyCurrentColor(child, warnings);
 }
 
+/** Round `value` to `precision` decimal places without float noise. */
+function roundTo(value: number, precision: number): number {
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
+}
+
 /** Scale every number in a length list (e.g. stroke-dasharray) by `factor`. */
-function scaleLengthList(raw: string, factor: number): string | null {
+function scaleLengthList(raw: string, factor: number, precision: number): string | null {
   const parts = raw
     .trim()
     .split(/[\s,]+/)
     .filter(Boolean);
   const values = parts.map(Number);
   if (values.some((v) => !Number.isFinite(v))) return null;
-  return values.map((v) => String(v * factor)).join(' ');
+  return values.map((v) => String(roundTo(v * factor, precision))).join(' ');
 }
 
 function convertNodeToPath(node: INode, d: string): void {
@@ -334,6 +350,18 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
   if (!Number.isFinite(size) || size <= 0) {
     throw new NormalizeError(`invalid size: ${String(options.size)}`);
   }
+  const padding = options.padding ?? 0;
+  if (!Number.isFinite(padding) || padding < 0 || padding * 2 >= size) {
+    throw new NormalizeError(
+      `invalid padding: ${String(options.padding)} (must be >= 0 and less than half the size)`,
+    );
+  }
+  const precision = options.precision ?? 3;
+  if (!Number.isInteger(precision) || precision < 0 || precision > 10) {
+    throw new NormalizeError(
+      `invalid precision: ${String(options.precision)} (must be an integer between 0 and 10)`,
+    );
+  }
   const strokePolicy = options.strokePolicy ?? 'accurate';
   if (!['accurate', 'half', 'ignore'].includes(strokePolicy)) {
     throw new NormalizeError(`invalid strokePolicy: ${String(options.strokePolicy)}`);
@@ -384,7 +412,7 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
     throw new NormalizeError('content has zero extent');
   }
 
-  const scale = size / maxDim;
+  const scale = (size - padding * 2) / maxDim;
   const ox = (size - width * scale) / 2;
   const oy = (size - height * scale) / 2;
 
@@ -393,17 +421,18 @@ export function normalizeIcon(svg: string, options: NormalizeOptions = {}): Norm
       .translate(-minX, -minY)
       .scale(scale)
       .translate(ox, oy)
+      .round(precision)
       .toString();
 
     const lengthScale = strokeScale * scale;
     if (strokeWidth !== null) {
       // Stroke lengths land on the leaf, resolved and rescaled, so the
       // output no longer depends on inherited values that we cannot scale.
-      node.attributes['stroke-width'] = String(strokeWidth * lengthScale);
+      node.attributes['stroke-width'] = String(roundTo(strokeWidth * lengthScale, precision));
       for (const attr of ['stroke-dasharray', 'stroke-dashoffset'] as const) {
         const raw = strokeCtx[attr];
         if (raw !== undefined && raw.trim() !== '' && raw.trim() !== 'none') {
-          const scaled = scaleLengthList(raw, lengthScale);
+          const scaled = scaleLengthList(raw, lengthScale, precision);
           if (scaled === null) {
             warnings.push(`<path>: could not rescale ${attr}="${raw}"`);
           } else {

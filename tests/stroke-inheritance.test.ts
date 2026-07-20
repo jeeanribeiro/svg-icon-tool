@@ -12,7 +12,7 @@ function collectByName(node: INode, name: string, out: INode[]): INode[] {
 
 describe('stroke inheritance', () => {
   it('resolves stroke-width inherited from ancestor groups', () => {
-    const { svg, warnings } = normalizeIcon(fixture('inherited-stroke.svg'));
+    const { svg, warnings } = normalizeIcon(fixture('inherited-stroke.svg'), { precision: 6 });
     expect(warnings).toEqual([]);
 
     const root = parseSync(svg);
@@ -59,7 +59,7 @@ describe('stroke inheritance', () => {
       '<g stroke-dasharray="4 2" stroke-dashoffset="3">' +
       '<path d="M0 24h48" fill="none" stroke="#000" stroke-width="2"/>' +
       '</g></svg>';
-    const { svg } = normalizeIcon(input);
+    const { svg } = normalizeIcon(input, { precision: 6 });
     const root = parseSync(svg);
     const path = collectByName(root, 'path', [])[0];
     expect(path).toBeDefined();
