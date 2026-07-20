@@ -1,10 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023"],
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "resolveJsonModule": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "strict": true,
@@ -14,7 +13,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["vite/client"]
   },
-  "include": ["src", "tests", "tsup.config.ts", "vitest.config.ts", "vite.playground.config.ts"]
+  "include": ["./**/*.ts", "../src/**/*.ts"]
 }
