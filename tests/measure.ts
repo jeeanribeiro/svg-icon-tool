@@ -1,5 +1,5 @@
 import { parseSync, type INode } from 'svgson';
-import pathBounds from 'svg-path-bounds';
+import { pathBounds } from '../src/bounds.js';
 import { expandBoundsForStroke, type StrokePolicy } from '../src/stroke.js';
 
 export interface Extent {

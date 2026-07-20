@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import pathBounds from 'svg-path-bounds';
+import { pathBounds } from '../src/bounds.js';
 import { shapeToPathData } from '../src/shapes.js';
 import { normalizeIcon } from '../src/index.js';
 import { fixture } from './helpers.js';

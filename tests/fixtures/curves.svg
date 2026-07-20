@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- A lens built from two cubics whose control points reach far outside
+       the curve: the true vertical extrema sit mid-segment at y=0 and
+       y=100, while the control-point hull spans -16.667..116.667. -->
+  <path d="M10 50C10 -16.667 90 -16.667 90 50C90 116.667 10 116.667 10 50Z" fill="#0f766e"/>
+</svg>

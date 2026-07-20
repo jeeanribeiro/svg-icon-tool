@@ -61,7 +61,13 @@ describe('pixel regression (resvg)', () => {
   // inherited-stroke.svg is deliberately absent: its last path paints
   // nothing (a line with fill only), so measured geometry exceeds visible
   // pixels there by design.
-  for (const name of ['path-basic.svg', 'shapes.svg', 'transforms.svg', 'caps-joins.svg']) {
+  for (const name of [
+    'path-basic.svg',
+    'shapes.svg',
+    'transforms.svg',
+    'caps-joins.svg',
+    'curves.svg',
+  ]) {
     it(`fills and centers ${name}`, () => {
       const { svg } = normalizeIcon(fixture(name));
       expectFilledAndCentered(svg);

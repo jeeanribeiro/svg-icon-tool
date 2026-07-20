@@ -1,6 +1,6 @@
 import { parseSync, stringify, type INode } from 'svgson';
 import svgpath from 'svgpath';
-import pathBounds from 'svg-path-bounds';
+import { pathBounds } from './bounds.js';
 import { SHAPE_NAMES, shapeToPathData } from './shapes.js';
 import {
   IDENTITY,
